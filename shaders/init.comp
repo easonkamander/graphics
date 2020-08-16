@@ -16,10 +16,10 @@ layout (std430, binding = 1) buffer prcsInitBuffer {
 layout (std430, binding = 2) buffer prcsIterBuffer {
 	PrcsIter prcsIter[];
 };
-layout (location = 0) uniform vec3 cameraPos;
-layout (location = 1) uniform mat3 cameraDir;
 
 void main () {
 	const uint indx = gl_GlobalInvocationID.x + 1280 * gl_GlobalInvocationID.y;
-	imageStore(imgOut, prcsInit[indx].point, vec4(prcsInit[indx].arrow, 1.0));
+	prcsInit[indx].point = ivec2(gl_GlobalInvocationID.xy);
+	prcsInit[indx].arrow = normalize(vec3((2.0*prcsInit[indx].point + 1.0)/imageSize(imgOut) - 1.0, 2.0));
+	prcsIter[indx].dist = 0.0;
 }
