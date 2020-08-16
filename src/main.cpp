@@ -5,46 +5,49 @@
 #include <fstream>
 #include <sstream>
 #include <string>
-#include <vector>
 #include <cstdlib>
 #include <cmath>
 
-std::string readFile (std::string path) {
-	std::ifstream file(path);
-	std::string content;
-	if (file) {
-		std::ostringstream stream;
-		stream << file.rdbuf();
-		content = stream.str();
-	} else {
-		std::cout << "Unable To Read File: " + path << std::endl;
+GLuint initShader (GLenum type, std::string file_path) {
+	std::ifstream file_obj(file_path);
+	if (!file_obj) {
+		std::cout << "Unable To Read File: " + file_path << std::endl;
+		return 0;
 	}
-	return content;
+	
+	std::ostringstream file_buffer;
+	file_buffer << file_obj.rdbuf();
+	std::string file_data = file_buffer.str();
+	const char* file_str = file_data.c_str();
+	int file_len = file_data.size();
+	
+	GLuint shader = glCreateShader(type);
+	glShaderSource(shader, 1, &file_str, &file_len);
+	glCompileShader(shader);
+	
+	GLint status;
+	glGetShaderiv(shader, GL_COMPILE_STATUS, &status);
+	if (status == GL_FALSE) {
+		GLint err_len;
+		glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &err_len);
+		char err_log[err_len];
+		glGetShaderInfoLog(shader, err_len, &err_len, err_log);
+		std::cerr << err_log;
+		return 0;
+	}
+	
+	return shader;
 }
 
-bool getShaderStatus (GLuint obj) {
+bool vldtProgram (GLuint program) {
 	GLint status;
-	glGetShaderiv(obj, GL_COMPILE_STATUS, &status);
-	if(status == GL_FALSE) {
-		GLint length;
-		glGetShaderiv(obj, GL_INFO_LOG_LENGTH, &length);
-		std::vector<char> log(length);
-		glGetShaderInfoLog(obj, length, &length, &log[0]);
-		std::cerr << &log[0];
-		return false;
-	}
-	return true;
-}
-
-bool getProgramStatus (GLuint obj) {
-	GLint status;
-	glGetProgramiv(obj, GL_LINK_STATUS, &status);
-	if(status == GL_FALSE) {
-		GLint length;
-		glGetProgramiv(obj, GL_INFO_LOG_LENGTH, &length);
-		std::vector<char> log(length);
-		glGetProgramInfoLog(obj, length, &length, &log[0]);
-		std::cerr << &log[0];
+	glGetProgramiv(program, GL_LINK_STATUS, &status);
+	if (status == GL_FALSE) {
+		GLint err_len;
+		glGetShaderiv(program, GL_INFO_LOG_LENGTH, &err_len);
+		char err_log[err_len];
+		glGetShaderInfoLog(program, err_len, &err_len, err_log);
+		std::cerr << err_log;
 		return false;
 	}
 	return true;
@@ -84,7 +87,7 @@ int main () {
 
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 5);
+	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
 
 	GLFWwindow* window;
 
@@ -121,37 +124,15 @@ int main () {
 	glBindImageTexture(0, texture, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA8);
 	glGenerateMipmap(GL_TEXTURE_2D);
 
-	GLuint vertShader = glCreateShader(GL_VERTEX_SHADER);
-	const char *vertSource[2] = {
-		"#version 450\n",
-		"in vec2 pixel;\
-		out vec2 point;\
-		void main() {\
-			point = pixel*0.5f + 0.5f;\
-			gl_Position = vec4(pixel, 0.0, 1.0);\
-		}"
-	};
-	glShaderSource(vertShader, 2, vertSource, NULL);
-	glCompileShader(vertShader);
-	if(!getShaderStatus(vertShader)) {
+	GLuint vertShader = initShader(GL_VERTEX_SHADER, "shaders/base.vert");
+	if(!vertShader) {
 		glfwDestroyWindow(window);
 		glfwTerminate();
 		return 1;
 	}
 
-	GLuint fragShader = glCreateShader(GL_FRAGMENT_SHADER);
-	const char *fragSource[2] = {
-		"#version 450\n",
-		"uniform sampler2D srcTex;\
-		in vec2 point;\
-		out vec4 color;\
-		void main() {\
-			color = texture(srcTex, point);\
-		}"
-	};
-	glShaderSource(fragShader, 2, fragSource, NULL);
-	glCompileShader(fragShader);
-	if(!getShaderStatus(fragShader)) {
+	GLuint fragShader = initShader(GL_FRAGMENT_SHADER, "shaders/base.frag");
+	if(!fragShader) {
 		glfwDestroyWindow(window);
 		glfwTerminate();
 		return 1;
@@ -162,7 +143,7 @@ int main () {
 	glAttachShader(quadProgram, fragShader);
 	glBindFragDataLocation(quadProgram, 0, "color");
 	glLinkProgram(quadProgram);
-	if (!getProgramStatus(quadProgram)) {
+	if (!vldtProgram(quadProgram)) {
 		glfwDestroyWindow(window);
 		glfwTerminate();
 		return 1;
@@ -201,15 +182,8 @@ int main () {
 	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, ssboSavedLengths);
 	glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 
-	std::string compSource = readFile("shaders/main.comp");
-
-	GLuint compShader = glCreateShader(GL_COMPUTE_SHADER);
-	const char *compSourceChar;
-	compSourceChar = compSource.c_str();
-	int compSourceLength = compSource.size();
-	glShaderSource(compShader, 1, &compSourceChar, &compSourceLength);
-	glCompileShader(compShader);
-	if (!getShaderStatus(compShader)) {
+	GLuint compShader = initShader(GL_COMPUTE_SHADER, "shaders/main.comp");
+	if (!compShader) {
 		glfwDestroyWindow(window);
 		glfwTerminate();
 		return 1;
@@ -218,7 +192,7 @@ int main () {
 	GLuint compProgram = glCreateProgram();
 	glAttachShader(compProgram, compShader);
 	glLinkProgram(compProgram);
-	if (!getProgramStatus(compProgram)) {
+	if (!vldtProgram(compProgram)) {
 		glfwDestroyWindow(window);
 		glfwTerminate();
 		return 1;
