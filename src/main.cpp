@@ -66,14 +66,14 @@ bool vldtProgram (GLuint program) {
 }
 
 void getCameraDirMat (float* cameraDir, float* cameraDirMat) {
-	cameraDirMat[0] = cosf(cameraDir[0])*cosf(cameraDir[2])+sinf(cameraDir[0])*sinf(cameraDir[1])*sinf(cameraDir[2]);
-	cameraDirMat[1] = cosf(cameraDir[2])*sinf(cameraDir[0])*sinf(cameraDir[1]) - cosf(cameraDir[0])*sinf(cameraDir[2]);
+	cameraDirMat[0] = cosf(cameraDir[0])*cosf(cameraDir[2]) + sinf(cameraDir[0])*sinf(cameraDir[1])*sinf(cameraDir[2]);
+	cameraDirMat[1] = cosf(cameraDir[0])*sinf(cameraDir[2]) - cosf(cameraDir[2])*sinf(cameraDir[0])*sinf(cameraDir[1]);
 	cameraDirMat[2] = cosf(cameraDir[1])*sinf(cameraDir[0]);
-	cameraDirMat[3] = cosf(cameraDir[1])*sinf(cameraDir[2]);
+	cameraDirMat[3] = -cosf(cameraDir[1])*sinf(cameraDir[2]);
 	cameraDirMat[4] = cosf(cameraDir[1])*cosf(cameraDir[2]);
-	cameraDirMat[5] = -sinf(cameraDir[1]);
+	cameraDirMat[5] = sinf(cameraDir[1]);
 	cameraDirMat[6] = cosf(cameraDir[0])*sinf(cameraDir[1])*sinf(cameraDir[2]) - cosf(cameraDir[2])*sinf(cameraDir[0]);
-	cameraDirMat[7] = cosf(cameraDir[0])*cosf(cameraDir[2])*sinf(cameraDir[1]) + sinf(cameraDir[0])*sinf(cameraDir[2]);
+	cameraDirMat[7] = -cosf(cameraDir[0])*cosf(cameraDir[2])*sinf(cameraDir[1]) - sinf(cameraDir[0])*sinf(cameraDir[2]);
 	cameraDirMat[8] = cosf(cameraDir[0])*cosf(cameraDir[1]);
 }
 
@@ -120,16 +120,17 @@ int main () {
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, window_x, window_y, 0, GL_RGBA, GL_FLOAT, NULL);
 	glBindImageTexture(0, texture, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA8);
+	glGenerateMipmap(GL_TEXTURE_2D);
 
 	GLuint vertShader = getShader(GL_VERTEX_SHADER, "shaders/base.vert");
-	if(!vertShader) {
+	if (!vertShader) {
 		glfwDestroyWindow(window);
 		glfwTerminate();
 		return 1;
 	}
 
 	GLuint fragShader = getShader(GL_FRAGMENT_SHADER, "shaders/base.frag");
-	if(!fragShader) {
+	if (!fragShader) {
 		glfwDestroyWindow(window);
 		glfwTerminate();
 		return 1;
@@ -169,10 +170,6 @@ int main () {
 	GLint quadPtrPixel = glGetAttribLocation(quadProgram, "pixel");
 	glVertexAttribPointer(quadPtrPixel, 2, GL_FLOAT, GL_FALSE, 0, 0);
 	glEnableVertexAttribArray(quadPtrPixel);
-
-	std::cout << sizeof(int) << std::endl;
-	std::cout << sizeof(float) << std::endl;
-	std::cout << sizeof(PrcsInit) << std::endl;
 
 	PrcsInit* prcsDataInit = new PrcsInit[window_x*window_y];
 	PrcsIter* prcsDataIter = new PrcsIter[window_x*window_y];
@@ -239,16 +236,6 @@ int main () {
 	getCameraDirMat(&cameraDir[0], &cameraDirMat[0]);
 	glUniformMatrix3fv(ptrCameraDir, 1, GL_TRUE, &cameraDirMat[0]);
 
-	// GLuint compMultiple[][2] = {
-	// 	{144, 81},
-	// 	{16, 9},
-	// 	{4, 3},
-	// 	{1, 1}
-	// };
-	// int compMultipleLen = sizeof(compMultiple)/sizeof(compMultiple[0]);
-	// GLint compPtrMultiple = glGetUniformLocation(compProgram, "multiple");
-	// glUniform2uiv(compPtrMultiple, 1, &compMultiple[0][0]);
-
 	double time = glfwGetTime();
 
 	while (!glfwWindowShouldClose(window)) {
@@ -261,7 +248,6 @@ int main () {
 		glUniformMatrix3fv(ptrCameraDir, 1, GL_TRUE, &cameraDirMat[0]);
 		glDispatchCompute(window_x, window_y, 1);
 		glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
-		glClear(GL_COLOR_BUFFER_BIT);
 
 		glUseProgram(quadProgram);
 		glBindVertexArray(quadVAO);
@@ -272,6 +258,23 @@ int main () {
 		glfwPollEvents();
 		if (GLFW_PRESS == glfwGetKey(window, GLFW_KEY_ESCAPE)) {
 			glfwSetWindowShouldClose(window, 1);
+		}
+		if (GLFW_PRESS == glfwGetKey(window, GLFW_KEY_LEFT)) {
+			cameraDir[0] -= 0.01;
+		}
+		if (GLFW_PRESS == glfwGetKey(window, GLFW_KEY_RIGHT)) {
+			cameraDir[0] += 0.01;
+		}
+		if (GLFW_PRESS == glfwGetKey(window, GLFW_KEY_UP)) {
+			cameraDir[1] += 0.01;
+		}
+		if (GLFW_PRESS == glfwGetKey(window, GLFW_KEY_DOWN)) {
+			cameraDir[1] -= 0.01;
+		}
+		if (GLFW_PRESS == glfwGetKey(window, GLFW_KEY_SPACE)) {
+			cameraPos[0] += 0.1*cosf(cameraDir[1])*sinf(cameraDir[0]);
+			cameraPos[1] += 0.1*sinf(cameraDir[1]);
+			cameraPos[2] += 0.1*cosf(cameraDir[1])*cosf(cameraDir[0]);
 		}
 
 		glfwSwapBuffers(window);

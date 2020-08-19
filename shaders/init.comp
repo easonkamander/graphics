@@ -19,7 +19,9 @@ layout (std430, binding = 2) buffer prcsIterBuffer {
 
 void main () {
 	const uint indx = gl_GlobalInvocationID.x + 1280 * gl_GlobalInvocationID.y;
+	const ivec2 screen = imageSize(imgOut);
 	prcsInit[indx].point = ivec2(gl_GlobalInvocationID.xy);
-	prcsInit[indx].arrow = normalize(vec3((2.0*prcsInit[indx].point + 1.0)/imageSize(imgOut) - 1.0, 2.0));
+	prcsInit[indx].arrow = normalize(vec3((2.0 * prcsInit[indx].point + 1.0 - screen) / max(screen.x, screen.y), 1.0));
 	prcsIter[indx].dist = 0.0;
+	imageStore(imgOut, prcsInit[indx].point, vec4(0.0, 0.0, 0.0, 1.0));
 }
