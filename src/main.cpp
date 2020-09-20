@@ -1,10 +1,11 @@
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 
+#include <cmath>
+
 #include <iostream>
 #include <fstream>
 #include <sstream>
-#include <cmath>
 
 struct PrcsInit {
 	int point[4];
@@ -15,9 +16,28 @@ struct PrcsIter {
 	float dist;
 };
 
+struct PrcsItem {
+	float circle[4];
+};
+
+int windowDim[2];
+
 void resize (GLFWwindow* window, int window_x, int window_y) {
-	glViewport(0, 0, window_x, window_y);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, window_x, window_y, 0, GL_RGBA, GL_FLOAT, NULL);
+	windowDim[0] = window_x;
+	windowDim[1] = window_y;
+	glViewport(0, 0, windowDim[0], windowDim[1]);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, windowDim[0], windowDim[1], 0, GL_RGBA, GL_FLOAT, NULL);
+	// PrcsInit* prcsDataInit = new PrcsInit[windowDim[0]*windowDim[1]];
+	// PrcsIter* prcsDataIter = new PrcsIter[windowDim[0]*windowDim[1]];
+	// glBindBuffer(GL_SHADER_STORAGE_BUFFER, prcsBufr[0]);
+	// glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(PrcsInit)*windowDim[0]*windowDim[1], prcsDataInit, GL_STATIC_COPY);
+	// glBindBuffer(GL_SHADER_STORAGE_BUFFER, prcsBufr[1]);
+	// glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(PrcsIter)*windowDim[0]*windowDim[1], prcsDataIter, GL_DYNAMIC_COPY);
+	// glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+	// glUseProgram(initProgram);
+	// glDispatchCompute(windowDim[0], windowDim[1], 1);
+	// glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+	// glClear(GL_COLOR_BUFFER_BIT);
 }
 
 GLuint getShader (GLenum type, std::string file_path) {
@@ -89,9 +109,10 @@ int main () {
 
 	GLFWwindow* window;
 
-	int window_x = 1280, window_y = 720;
+	windowDim[0] = 1280;
+	windowDim[1] = 720;
 
-	if (!(window = glfwCreateWindow(window_x, window_y, "Graphics", 0, 0))) {
+	if (!(window = glfwCreateWindow(windowDim[0], windowDim[1], "Graphics", 0, 0))) {
 		std::cerr << "Window Error" << std::endl;
 		glfwTerminate();
 		return 1;
@@ -108,7 +129,7 @@ int main () {
 		return 1;
 	}
 
-	glViewport(0, 0, window_x, window_y);
+	glViewport(0, 0, windowDim[0], windowDim[1]);
 
 	GLuint texture;
 	glGenTextures(1, &texture);
@@ -118,7 +139,7 @@ int main () {
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, window_x, window_y, 0, GL_RGBA, GL_FLOAT, NULL);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, windowDim[0], windowDim[1], 0, GL_RGBA, GL_FLOAT, NULL);
 	glBindImageTexture(0, texture, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA8);
 	glGenerateMipmap(GL_TEXTURE_2D);
 
@@ -171,21 +192,35 @@ int main () {
 	glVertexAttribPointer(quadPtrPixel, 2, GL_FLOAT, GL_FALSE, 0, 0);
 	glEnableVertexAttribArray(quadPtrPixel);
 
-	PrcsInit* prcsDataInit = new PrcsInit[window_x*window_y];
-	PrcsIter* prcsDataIter = new PrcsIter[window_x*window_y];
-	GLuint* prcsBufr = new GLuint[2];
-	glGenBuffers(2, prcsBufr);
+	PrcsInit* prcsDataInit = new PrcsInit[windowDim[0]*windowDim[1]];
+	PrcsIter* prcsDataIter = new PrcsIter[windowDim[0]*windowDim[1]];
+	PrcsItem* prcsDataItem = new PrcsItem[100];
+	for (int i = 0; i < 20; i++) {
+		prcsDataItem[i].circle[0] = 20.0*rand()/RAND_MAX - 10;
+		prcsDataItem[i].circle[1] = 20.0*rand()/RAND_MAX - 10;
+		prcsDataItem[i].circle[2] = 20.0*rand()/RAND_MAX - 10;
+		prcsDataItem[i].circle[3] = 2.0*rand()/RAND_MAX;
+	}
+	std::cout << prcsDataItem[0].circle[0] << std::endl;
+	std::cout << prcsDataItem[0].circle[1] << std::endl;
+	std::cout << prcsDataItem[0].circle[2] << std::endl;
+	std::cout << prcsDataItem[0].circle[3] << std::endl;
+	GLuint* prcsBufr = new GLuint[3];
+	glGenBuffers(3, prcsBufr);
 	glBindBuffer(GL_SHADER_STORAGE_BUFFER, prcsBufr[0]);
-	glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(PrcsInit)*window_x*window_y, prcsDataInit, GL_STATIC_COPY);
+	glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(PrcsInit)*windowDim[0]*windowDim[1], prcsDataInit, GL_STATIC_COPY);
 	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, prcsBufr[0]);
 	glBindBuffer(GL_SHADER_STORAGE_BUFFER, prcsBufr[1]);
-	glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(PrcsIter)*window_x*window_y, prcsDataIter, GL_DYNAMIC_COPY);
+	glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(PrcsIter)*windowDim[0]*windowDim[1], prcsDataIter, GL_DYNAMIC_COPY);
 	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, prcsBufr[1]);
+	glBindBuffer(GL_SHADER_STORAGE_BUFFER, prcsBufr[2]);
+	glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(PrcsItem)*100, prcsDataItem, GL_DYNAMIC_COPY);
+	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, prcsBufr[2]);
 	glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 
 	GLuint initShader = getShader(GL_COMPUTE_SHADER, "shaders/init.comp");
 	if (!initShader) {
-		glDeleteBuffers(2, prcsBufr);
+		glDeleteBuffers(3, prcsBufr);
 		glfwDestroyWindow(window);
 		glfwTerminate();
 		return 1;
@@ -195,20 +230,20 @@ int main () {
 	glAttachShader(initProgram, initShader);
 	glLinkProgram(initProgram);
 	if (!vldtProgram(initProgram)) {
-		glDeleteBuffers(2, prcsBufr);
+		glDeleteBuffers(3, prcsBufr);
 		glfwDestroyWindow(window);
 		glfwTerminate();
 		return 1;
 	}
 
 	glUseProgram(initProgram);
-	glDispatchCompute(window_x, window_y, 1);
+	glDispatchCompute(windowDim[0], windowDim[1], 1);
 	glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
 	glClear(GL_COLOR_BUFFER_BIT);
 
 	GLuint compShader = getShader(GL_COMPUTE_SHADER, "shaders/main.comp");
 	if (!compShader) {
-		glDeleteBuffers(2, prcsBufr);
+		glDeleteBuffers(3, prcsBufr);
 		glfwDestroyWindow(window);
 		glfwTerminate();
 		return 1;
@@ -218,7 +253,7 @@ int main () {
 	glAttachShader(compProgram, compShader);
 	glLinkProgram(compProgram);
 	if (!vldtProgram(compProgram)) {
-		glDeleteBuffers(2, prcsBufr);
+		glDeleteBuffers(3, prcsBufr);
 		glfwDestroyWindow(window);
 		glfwTerminate();
 		return 1;
@@ -239,14 +274,14 @@ int main () {
 	double time = glfwGetTime();
 
 	while (!glfwWindowShouldClose(window)) {
-		std::cout << glfwGetTime() - time << std::endl;
+		std::cout << 60 * (glfwGetTime() - time) << std::endl;
 		time = glfwGetTime();
 
 		glUseProgram(compProgram);
 		glUniform3fv(ptrCameraPos, 1, &cameraPos[0]);
 		getCameraDirMat(&cameraDir[0], &cameraDirMat[0]);
 		glUniformMatrix3fv(ptrCameraDir, 1, GL_TRUE, &cameraDirMat[0]);
-		glDispatchCompute(window_x, window_y, 1);
+		glDispatchCompute(windowDim[0], windowDim[1], 1);
 		glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
 
 		glUseProgram(quadProgram);
@@ -280,7 +315,7 @@ int main () {
 		glfwSwapBuffers(window);
 	}
 
-	glDeleteBuffers(2, prcsBufr);
+	glDeleteBuffers(3, prcsBufr);
 	glfwDestroyWindow(window);
 	glfwTerminate();
 	return 0;
