@@ -1,50 +1,69 @@
 #version 460
 layout (local_size_x = 1, local_size_y = 1) in;
 layout (rgba8, binding = 0) uniform image2D imgOut;
-struct PrcsInit {
-	ivec2 point;
-	float _[2];
-	vec3 arrow;
-	float _[1];
+layout (std430, binding = 1) buffer BufrPixStcPoint {
+	ivec2 prcsPixStcPoint[];
 };
-layout (std430, binding = 1) buffer prcsInitBuffer {
-	PrcsInit prcsInit[];
+layout (std430, binding = 2) buffer BufrPixStcArrow {
+	vec4 prcsPixStcArrow[];
 };
-struct PrcsIter {
-	float dist;
+layout (std430, binding = 3) buffer BufrPixDynDist {
+	float prcsPixDynDist[];
 };
-layout (std430, binding = 2) buffer prcsIterBuffer {
-	PrcsIter prcsIter[];
+layout (std430, binding = 4) buffer BufrPixDynObjLog {
+	uint prcsPixDynObjLog[];
 };
-struct PrcsItem {
-	vec4 circle;
+struct PrcObjDyn {
+	vec4 center;
+	vec4 color;
 };
-layout (std430, binding = 3) buffer prcsItemBuffer {
-	PrcsItem prcsItem[20];
+layout (std430, binding = 5) buffer BufrObjDyn {
+	PrcObjDyn prcsObjDyn[];
 };
 layout (location = 0) uniform vec3 cameraPos;
 layout (location = 1) uniform mat3 cameraDir;
-const uint itemDepth = 2;
-const float maxDist = 10000.0;
+const uint objSize = 512;
+const float maxDist = 1000.0;
 
-float trace (vec3 org, vec3 ray, PrcsItem itm) {
-	vec3 crc_p = org - itm.circle.xyz;
-	float b = dot(crc_p, ray);
-	float d = b*b + itm.circle.w*itm.circle.w - length(crc_p)*length(crc_p);
-	float a = -b - sqrt(abs(d));
-	return max(a, 0) - maxDist * sign(min(min(d, a), 0));
+float trace (vec3 org, vec3 ray, uint itm) {
+	vec3 off = org - prcsObjDyn[itm].center.xyz;
+	float rad = prcsObjDyn[itm].center.w;
+	float mid = -dot(ray, off)/dot(ray, ray);
+	float pin = length(off + ray * mid);
+	float diff = sqrt(abs(rad*rad - pin*pin));
+	return max(mid - diff, 0) + maxDist * int(pin > rad || mid + diff < 0);
+}
+
+uint search (vec3 org, vec3 ray, inout float dst, uint objlog) {
+	uint itm = 0;
+	uint n = 1;
+	uint i = 0;
+	float d = trace(org, ray, objlog);
+	uint hit = uint(d < dst);
+	uint fnl = uint(objlog >= objSize / 2);
+	itm += hit * fnl * (objlog - itm);
+	dst += hit * fnl * (d - dst);
+	while (n > 0 && i < objSize) {
+		float d = trace(org, ray, n);
+		uint hit = uint(d < dst);
+		uint fnl = uint(n >= objSize / 2);
+		itm += hit * fnl * (n - itm);
+		dst += hit * fnl * (d - dst);
+		n = uint((n & (n + 1)) > 0 || hit * n * (objSize - n - 1) > 0) * (n + 1 + hit * (1 - fnl) * (n - 1) - (1 - hit * (1 - fnl)) * uint(n > 1) * (n % 2) * (n + 1)/2);
+		i++;
+	}
+	return itm;
 }
 
 void main () {
 	const uint indx = gl_GlobalInvocationID.x + 1280 * gl_GlobalInvocationID.y;
-	float dist = maxDist;
-	for (int i = 0; i < 20; i++) {
-		dist = min(dist, trace(cameraPos, cameraDir*prcsInit[indx].arrow, prcsItem[i]));
-	}
-	imageStore(imgOut, prcsInit[indx].point, vec4(
-		dist/20,
-		0,
-		0,
-		1
-	));
+	const vec3 org = cameraPos;
+	const vec3 ray = cameraDir*prcsPixStcArrow[indx].xyz;
+	float dst = 1000;
+	uint itm = search(org, ray, dst, prcsPixDynObjLog[indx]);
+	vec3 hit = org + ray * dst;
+	vec3 light = vec3(0, 1, 0);
+	vec3 normal = (hit - prcsObjDyn[itm].center.xyz) / prcsObjDyn[itm].center.w;
+	prcsPixDynObjLog[indx] = itm;
+	imageStore(imgOut, prcsPixStcPoint[indx], prcsObjDyn[itm].color * (0.5 + 0.5 * dot(light, normal)));
 }

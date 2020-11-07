@@ -7,17 +7,17 @@
 #include <fstream>
 #include <sstream>
 
-struct PrcsInit {
-	int point[4];
-	float arrow[4];
+struct PrcIVec2 {
+	int data[2];
 };
 
-struct PrcsIter {
-	float dist;
+struct PrcFVec4 {
+	float data[4];
 };
 
-struct PrcsItem {
-	float circle[4];
+struct PrcObjDyn {
+	float center[4];
+	float color[4];
 };
 
 int windowDim[2];
@@ -95,6 +95,20 @@ void getCameraDirMat (float* cameraDir, float* cameraDirMat) {
 	cameraDirMat[6] = cosf(cameraDir[0])*sinf(cameraDir[1])*sinf(cameraDir[2]) - cosf(cameraDir[2])*sinf(cameraDir[0]);
 	cameraDirMat[7] = -cosf(cameraDir[0])*cosf(cameraDir[2])*sinf(cameraDir[1]) - sinf(cameraDir[0])*sinf(cameraDir[2]);
 	cameraDirMat[8] = cosf(cameraDir[0])*cosf(cameraDir[1]);
+}
+
+void swap (PrcObjDyn* lst, int bits, int i, int j) {
+	PrcObjDyn temp = lst[i];
+	lst[i] = lst[j];
+	lst[j] = temp;
+	if (std::log2(std::max(i, j)) + 1 < bits) {
+		swap(lst, bits, 2*i, 2*j);
+		swap(lst, bits, 2*i + 1, 2*j + 1);
+	}
+}
+
+void print (PrcObjDyn x) {
+	std::cout << std::to_string(x.center[0]) + ", " + std::to_string(x.center[1]) + ", " + std::to_string(x.center[2]) + ", " + std::to_string(x.center[3]) << std::endl;
 }
 
 int main () {
@@ -192,35 +206,76 @@ int main () {
 	glVertexAttribPointer(quadPtrPixel, 2, GL_FLOAT, GL_FALSE, 0, 0);
 	glEnableVertexAttribArray(quadPtrPixel);
 
-	PrcsInit* prcsDataInit = new PrcsInit[windowDim[0]*windowDim[1]];
-	PrcsIter* prcsDataIter = new PrcsIter[windowDim[0]*windowDim[1]];
-	PrcsItem* prcsDataItem = new PrcsItem[100];
-	for (int i = 0; i < 20; i++) {
-		prcsDataItem[i].circle[0] = 20.0*rand()/RAND_MAX - 10;
-		prcsDataItem[i].circle[1] = 20.0*rand()/RAND_MAX - 10;
-		prcsDataItem[i].circle[2] = 20.0*rand()/RAND_MAX - 10;
-		prcsDataItem[i].circle[3] = 2.0*rand()/RAND_MAX;
+	PrcIVec2* prcsPixStcPoint = new PrcIVec2[windowDim[0]*windowDim[1]];
+	PrcFVec4* prcsPixStcArrow = new PrcFVec4[windowDim[0]*windowDim[1]];
+	float* prcsPixDynDist = new float[windowDim[0]*windowDim[1]];
+	int* prcsPixDynObjLog = new int[windowDim[0]*windowDim[1]];
+	int objBits = 9;
+	int objSize = std::pow(2, objBits);
+	PrcObjDyn* prcsObjDyn = new PrcObjDyn[objSize];
+	prcsObjDyn[0].center[0] = 0;
+	prcsObjDyn[0].center[1] = 0;
+	prcsObjDyn[0].center[2] = 0;
+	prcsObjDyn[0].center[3] = 1000;
+	prcsObjDyn[0].color[0] = 0.15;
+	prcsObjDyn[0].color[1] = 0.15;
+	prcsObjDyn[0].color[2] = 0.15;
+	prcsObjDyn[0].color[3] = 1;
+	for (int i = objSize/2; i < objSize; i++) {
+		prcsObjDyn[i].center[0] = 20.0*rand()/RAND_MAX - 10;
+		prcsObjDyn[i].center[1] = 20.0*rand()/RAND_MAX - 10;
+		prcsObjDyn[i].center[2] = 20.0*rand()/RAND_MAX - 10;
+		prcsObjDyn[i].center[3] = 0.8*rand()/RAND_MAX + 0.8;
+		prcsObjDyn[i].color[0] = 1.0*rand()/RAND_MAX;
+		prcsObjDyn[i].color[1] = 1.0*rand()/RAND_MAX;
+		prcsObjDyn[i].color[2] = 1.0*rand()/RAND_MAX;
+		prcsObjDyn[i].color[3] = 1;
 	}
-	std::cout << prcsDataItem[0].circle[0] << std::endl;
-	std::cout << prcsDataItem[0].circle[1] << std::endl;
-	std::cout << prcsDataItem[0].circle[2] << std::endl;
-	std::cout << prcsDataItem[0].circle[3] << std::endl;
-	GLuint* prcsBufr = new GLuint[3];
-	glGenBuffers(3, prcsBufr);
+	std::cout << prcsObjDyn[100].color[0] << std::endl;
+	for (int level = 1; level < objBits; level++) {
+		for (int i = std::pow(2, objBits - level - 1); i < std::pow(2, objBits - level); i++) {
+			float dist = 1000000.f;
+			int indx;
+			for (int j = 2*i + 1; j < std::pow(2, objBits - level + 1); j++) {
+				float d = std::sqrt(
+					std::pow(prcsObjDyn[2*i].center[0] - prcsObjDyn[j].center[0], 2) +
+					std::pow(prcsObjDyn[2*i].center[1] - prcsObjDyn[j].center[1], 2) +
+					std::pow(prcsObjDyn[2*i].center[2] - prcsObjDyn[j].center[2], 2)
+				);
+				if (d < dist) {
+					dist = d;
+					indx = j;
+				}
+			}
+			swap(prcsObjDyn, objBits, 2*i + 1, indx);
+			prcsObjDyn[i].center[0] = (prcsObjDyn[2*i].center[0] + prcsObjDyn[2*i + 1].center[0]) / 2;
+			prcsObjDyn[i].center[1] = (prcsObjDyn[2*i].center[1] + prcsObjDyn[2*i + 1].center[1]) / 2;
+			prcsObjDyn[i].center[2] = (prcsObjDyn[2*i].center[2] + prcsObjDyn[2*i + 1].center[2]) / 2;
+			prcsObjDyn[i].center[3] = dist/2 + std::max(prcsObjDyn[2*i].center[3], prcsObjDyn[2*i + 1].center[3]);
+		}
+	}
+	GLuint* prcsBufr = new GLuint[5];
+	glGenBuffers(5, prcsBufr);
 	glBindBuffer(GL_SHADER_STORAGE_BUFFER, prcsBufr[0]);
-	glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(PrcsInit)*windowDim[0]*windowDim[1], prcsDataInit, GL_STATIC_COPY);
+	glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(PrcIVec2)*windowDim[0]*windowDim[1], prcsPixStcPoint, GL_STATIC_COPY);
 	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, prcsBufr[0]);
 	glBindBuffer(GL_SHADER_STORAGE_BUFFER, prcsBufr[1]);
-	glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(PrcsIter)*windowDim[0]*windowDim[1], prcsDataIter, GL_DYNAMIC_COPY);
+	glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(PrcFVec4)*windowDim[0]*windowDim[1], prcsPixStcArrow, GL_STATIC_COPY);
 	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, prcsBufr[1]);
 	glBindBuffer(GL_SHADER_STORAGE_BUFFER, prcsBufr[2]);
-	glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(PrcsItem)*100, prcsDataItem, GL_DYNAMIC_COPY);
+	glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(float)*windowDim[0]*windowDim[1], prcsPixDynDist, GL_DYNAMIC_COPY);
 	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, prcsBufr[2]);
+	glBindBuffer(GL_SHADER_STORAGE_BUFFER, prcsBufr[3]);
+	glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(int)*windowDim[0]*windowDim[1], prcsPixDynObjLog, GL_DYNAMIC_COPY);
+	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 4, prcsBufr[3]);
+	glBindBuffer(GL_SHADER_STORAGE_BUFFER, prcsBufr[4]);
+	glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(PrcObjDyn)*objSize, prcsObjDyn, GL_STATIC_COPY);
+	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 5, prcsBufr[4]);
 	glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 
 	GLuint initShader = getShader(GL_COMPUTE_SHADER, "shaders/init.comp");
 	if (!initShader) {
-		glDeleteBuffers(3, prcsBufr);
+		glDeleteBuffers(5, prcsBufr);
 		glfwDestroyWindow(window);
 		glfwTerminate();
 		return 1;
@@ -230,7 +285,7 @@ int main () {
 	glAttachShader(initProgram, initShader);
 	glLinkProgram(initProgram);
 	if (!vldtProgram(initProgram)) {
-		glDeleteBuffers(3, prcsBufr);
+		glDeleteBuffers(5, prcsBufr);
 		glfwDestroyWindow(window);
 		glfwTerminate();
 		return 1;
@@ -243,7 +298,7 @@ int main () {
 
 	GLuint compShader = getShader(GL_COMPUTE_SHADER, "shaders/main.comp");
 	if (!compShader) {
-		glDeleteBuffers(3, prcsBufr);
+		glDeleteBuffers(5, prcsBufr);
 		glfwDestroyWindow(window);
 		glfwTerminate();
 		return 1;
@@ -253,7 +308,7 @@ int main () {
 	glAttachShader(compProgram, compShader);
 	glLinkProgram(compProgram);
 	if (!vldtProgram(compProgram)) {
-		glDeleteBuffers(3, prcsBufr);
+		glDeleteBuffers(5, prcsBufr);
 		glfwDestroyWindow(window);
 		glfwTerminate();
 		return 1;
@@ -261,7 +316,7 @@ int main () {
 
 	glUseProgram(compProgram);
 
-	float cameraPos[3] = {0.f, 0.f, 0.f};
+	float cameraPos[3] = {0.f, 0.f, -40.f};
 	GLint ptrCameraPos = glGetUniformLocation(compProgram, "cameraPos");
 	glUniform3fv(ptrCameraPos, 1, &cameraPos[0]);
 
@@ -315,7 +370,7 @@ int main () {
 		glfwSwapBuffers(window);
 	}
 
-	glDeleteBuffers(3, prcsBufr);
+	glDeleteBuffers(5, prcsBufr);
 	glfwDestroyWindow(window);
 	glfwTerminate();
 	return 0;
