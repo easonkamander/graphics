@@ -16,7 +16,7 @@ struct PrcFVec4 {
 };
 
 struct PrcObjDyn {
-	float center[4];
+	float matrix[16];
 	float color[4];
 };
 
@@ -85,16 +85,23 @@ bool vldtProgram (GLuint program) {
 	return true;
 }
 
-void getCameraDirMat (float* cameraDir, float* cameraDirMat) {
-	cameraDirMat[0] = cosf(cameraDir[0])*cosf(cameraDir[2]) + sinf(cameraDir[0])*sinf(cameraDir[1])*sinf(cameraDir[2]);
-	cameraDirMat[1] = cosf(cameraDir[0])*sinf(cameraDir[2]) - cosf(cameraDir[2])*sinf(cameraDir[0])*sinf(cameraDir[1]);
-	cameraDirMat[2] = cosf(cameraDir[1])*sinf(cameraDir[0]);
-	cameraDirMat[3] = -cosf(cameraDir[1])*sinf(cameraDir[2]);
-	cameraDirMat[4] = cosf(cameraDir[1])*cosf(cameraDir[2]);
-	cameraDirMat[5] = sinf(cameraDir[1]);
-	cameraDirMat[6] = cosf(cameraDir[0])*sinf(cameraDir[1])*sinf(cameraDir[2]) - cosf(cameraDir[2])*sinf(cameraDir[0]);
-	cameraDirMat[7] = -cosf(cameraDir[0])*cosf(cameraDir[2])*sinf(cameraDir[1]) - sinf(cameraDir[0])*sinf(cameraDir[2]);
-	cameraDirMat[8] = cosf(cameraDir[0])*cosf(cameraDir[1]);
+void getMatrix (float* matrix, float* pos, float* dir, float* scl) {
+	matrix[0] = (cosf(dir[0])*cosf(dir[2]) + sinf(dir[0])*sinf(dir[1])*sinf(dir[2]))/scl[0];
+	matrix[1] = -cosf(dir[1])*sinf(dir[2])/scl[1];
+	matrix[2] = (cosf(dir[0])*sinf(dir[1])*sinf(dir[2]) - cosf(dir[2])*sinf(dir[0]))/scl[2];
+	matrix[3] = 0;
+	matrix[4] = (cosf(dir[0])*sinf(dir[2]) - cosf(dir[2])*sinf(dir[0])*sinf(dir[1]))/scl[0];
+	matrix[5] = cosf(dir[1])*cosf(dir[2])/scl[1];
+	matrix[6] = (-cosf(dir[0])*cosf(dir[2])*sinf(dir[1]) - sinf(dir[0])*sinf(dir[2]))/scl[2];
+	matrix[7] = 0;
+	matrix[8] = cosf(dir[1])*sinf(dir[0])/scl[0];
+	matrix[9] = sinf(dir[1])/scl[1];
+	matrix[10] = cosf(dir[0])*cosf(dir[1])/scl[2];
+	matrix[11] = 0;
+	matrix[12] = pos[0]/scl[0];
+	matrix[13] = pos[1]/scl[1];
+	matrix[14] = pos[2]/scl[2];
+	matrix[15] = 0;
 }
 
 void swap (PrcObjDyn* lst, int bits, int i, int j) {
@@ -105,10 +112,6 @@ void swap (PrcObjDyn* lst, int bits, int i, int j) {
 		swap(lst, bits, 2*i, 2*j);
 		swap(lst, bits, 2*i + 1, 2*j + 1);
 	}
-}
-
-void print (PrcObjDyn x) {
-	std::cout << std::to_string(x.center[0]) + ", " + std::to_string(x.center[1]) + ", " + std::to_string(x.center[2]) + ", " + std::to_string(x.center[3]) << std::endl;
 }
 
 int main () {
@@ -123,8 +126,8 @@ int main () {
 
 	GLFWwindow* window;
 
-	windowDim[0] = 1280;
-	windowDim[1] = 720;
+	windowDim[0] = 1800;
+	windowDim[1] = 900;
 
 	if (!(window = glfwCreateWindow(windowDim[0], windowDim[1], "Graphics", 0, 0))) {
 		std::cerr << "Window Error" << std::endl;
@@ -210,37 +213,37 @@ int main () {
 	PrcFVec4* prcsPixStcArrow = new PrcFVec4[windowDim[0]*windowDim[1]];
 	float* prcsPixDynDist = new float[windowDim[0]*windowDim[1]];
 	int* prcsPixDynObjLog = new int[windowDim[0]*windowDim[1]];
-	int objBits = 9;
+	int objBits = 6;
 	int objSize = std::pow(2, objBits);
 	PrcObjDyn* prcsObjDyn = new PrcObjDyn[objSize];
-	prcsObjDyn[0].center[0] = 0;
-	prcsObjDyn[0].center[1] = 0;
-	prcsObjDyn[0].center[2] = 0;
-	prcsObjDyn[0].center[3] = 1000;
+	float objInitPos[3] = {0.f, 0.f, 0.f};
+	float objInitDir[3] = {0.f, 0.f, 0.f};
+	float objInitScl[3] = {1000.f, 1000.f, 1000.f};
+	getMatrix(&prcsObjDyn[0].matrix[0], &objInitPos[0], &objInitDir[0], &objInitScl[0]);
 	prcsObjDyn[0].color[0] = 0.15;
 	prcsObjDyn[0].color[1] = 0.15;
 	prcsObjDyn[0].color[2] = 0.15;
 	prcsObjDyn[0].color[3] = 1;
 	for (int i = objSize/2; i < objSize; i++) {
-		prcsObjDyn[i].center[0] = 20.0*rand()/RAND_MAX - 10;
-		prcsObjDyn[i].center[1] = 20.0*rand()/RAND_MAX - 10;
-		prcsObjDyn[i].center[2] = 20.0*rand()/RAND_MAX - 10;
-		prcsObjDyn[i].center[3] = 0.8*rand()/RAND_MAX + 0.8;
+		float objNewPos[3] = {20.f*rand()/RAND_MAX - 10, 20.f*rand()/RAND_MAX - 10, 20.f*rand()/RAND_MAX - 10};
+		float objNewDir[3] = {0.f, 0.f, 0.f};
+		float rad = 0.8*rand()/RAND_MAX + 0.8;
+		float objNewScl[3] = {rad, rad, rad};
+		getMatrix(&prcsObjDyn[i].matrix[0], &objNewPos[0], &objNewDir[0], &objNewScl[0]);
 		prcsObjDyn[i].color[0] = 1.0*rand()/RAND_MAX;
 		prcsObjDyn[i].color[1] = 1.0*rand()/RAND_MAX;
 		prcsObjDyn[i].color[2] = 1.0*rand()/RAND_MAX;
 		prcsObjDyn[i].color[3] = 1;
 	}
-	std::cout << prcsObjDyn[100].color[0] << std::endl;
 	for (int level = 1; level < objBits; level++) {
 		for (int i = std::pow(2, objBits - level - 1); i < std::pow(2, objBits - level); i++) {
 			float dist = 1000000.f;
 			int indx;
 			for (int j = 2*i + 1; j < std::pow(2, objBits - level + 1); j++) {
 				float d = std::sqrt(
-					std::pow(prcsObjDyn[2*i].center[0] - prcsObjDyn[j].center[0], 2) +
-					std::pow(prcsObjDyn[2*i].center[1] - prcsObjDyn[j].center[1], 2) +
-					std::pow(prcsObjDyn[2*i].center[2] - prcsObjDyn[j].center[2], 2)
+					std::pow(prcsObjDyn[2*i].matrix[12] - prcsObjDyn[j].matrix[12], 2) +
+					std::pow(prcsObjDyn[2*i].matrix[13] - prcsObjDyn[j].matrix[13], 2) +
+					std::pow(prcsObjDyn[2*i].matrix[14] - prcsObjDyn[j].matrix[14], 2)
 				);
 				if (d < dist) {
 					dist = d;
@@ -248,10 +251,20 @@ int main () {
 				}
 			}
 			swap(prcsObjDyn, objBits, 2*i + 1, indx);
-			prcsObjDyn[i].center[0] = (prcsObjDyn[2*i].center[0] + prcsObjDyn[2*i + 1].center[0]) / 2;
-			prcsObjDyn[i].center[1] = (prcsObjDyn[2*i].center[1] + prcsObjDyn[2*i + 1].center[1]) / 2;
-			prcsObjDyn[i].center[2] = (prcsObjDyn[2*i].center[2] + prcsObjDyn[2*i + 1].center[2]) / 2;
-			prcsObjDyn[i].center[3] = dist/2 + std::max(prcsObjDyn[2*i].center[3], prcsObjDyn[2*i + 1].center[3]);
+			float objAvgPos[3] = {
+				(prcsObjDyn[2*i].matrix[12] + prcsObjDyn[2*i + 1].matrix[12]) / 2,
+				(prcsObjDyn[2*i].matrix[13] + prcsObjDyn[2*i + 1].matrix[13]) / 2,
+				(prcsObjDyn[2*i].matrix[14] + prcsObjDyn[2*i + 1].matrix[14]) / 2
+			};
+			float objAvgDir[3] = {0.f, 0.f, 0.f};
+			std::cout << dist << std::endl;
+			std::cout << prcsObjDyn[2*i].matrix[0] << std::endl;
+			std::cout << prcsObjDyn[2*i + 1].matrix[0] << std::endl;
+			float rad = dist/2 + std::max(prcsObjDyn[2*i].matrix[0], prcsObjDyn[2*i + 1].matrix[0]);
+			std::cout << rad << std::endl;
+			std::cout << std::endl;
+			float objAvgScl[3] = {rad, rad, rad};
+			getMatrix(&prcsObjDyn[i].matrix[0], &objAvgPos[0], &objAvgDir[0], &objAvgScl[0]);
 		}
 	}
 	GLuint* prcsBufr = new GLuint[5];
@@ -317,14 +330,12 @@ int main () {
 	glUseProgram(compProgram);
 
 	float cameraPos[3] = {0.f, 0.f, -40.f};
-	GLint ptrCameraPos = glGetUniformLocation(compProgram, "cameraPos");
-	glUniform3fv(ptrCameraPos, 1, &cameraPos[0]);
-
 	float cameraDir[3] = {0.f, 0.f, 0.f};
-	float cameraDirMat[9];
-	GLint ptrCameraDir = glGetUniformLocation(compProgram, "cameraDir");
-	getCameraDirMat(&cameraDir[0], &cameraDirMat[0]);
-	glUniformMatrix3fv(ptrCameraDir, 1, GL_TRUE, &cameraDirMat[0]);
+	float cameraScl[3] = {1.f, 1.f, 1.f};
+	float cameraMat[16];
+	GLint ptrCamera = glGetUniformLocation(compProgram, "camera");
+	getMatrix(&cameraMat[0], &cameraPos[0], &cameraDir[0], &cameraScl[0]);
+	glUniformMatrix4fv(ptrCamera, 1, GL_FALSE, &cameraMat[0]);
 
 	double time = glfwGetTime();
 
@@ -333,9 +344,7 @@ int main () {
 		time = glfwGetTime();
 
 		glUseProgram(compProgram);
-		glUniform3fv(ptrCameraPos, 1, &cameraPos[0]);
-		getCameraDirMat(&cameraDir[0], &cameraDirMat[0]);
-		glUniformMatrix3fv(ptrCameraDir, 1, GL_TRUE, &cameraDirMat[0]);
+		glUniformMatrix4fv(ptrCamera, 1, GL_FALSE, &cameraMat[0]);
 		glDispatchCompute(windowDim[0], windowDim[1], 1);
 		glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
 
@@ -366,6 +375,7 @@ int main () {
 			cameraPos[1] += 0.1*sinf(cameraDir[1]);
 			cameraPos[2] += 0.1*cosf(cameraDir[1])*cosf(cameraDir[0]);
 		}
+		getMatrix(&cameraMat[0], &cameraPos[0], &cameraDir[0], &cameraScl[0]);
 
 		glfwSwapBuffers(window);
 	}

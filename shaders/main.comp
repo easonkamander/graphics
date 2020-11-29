@@ -1,10 +1,10 @@
 #version 460
 layout (local_size_x = 1, local_size_y = 1) in;
-layout (rgba8, binding = 0) uniform image2D imgOut;
-layout (std430, binding = 1) buffer BufrPixStcPoint {
+layout (rgba8, binding = 0) uniform writeonly image2D imgOut;
+layout (std430, binding = 1) readonly buffer BufrPixStcPoint {
 	ivec2 prcsPixStcPoint[];
 };
-layout (std430, binding = 2) buffer BufrPixStcArrow {
+layout (std430, binding = 2) readonly buffer BufrPixStcArrow {
 	vec4 prcsPixStcArrow[];
 };
 layout (std430, binding = 3) buffer BufrPixDynDist {
@@ -14,56 +14,74 @@ layout (std430, binding = 4) buffer BufrPixDynObjLog {
 	uint prcsPixDynObjLog[];
 };
 struct PrcObjDyn {
-	vec4 center;
+	mat4 matrix;
 	vec4 color;
 };
-layout (std430, binding = 5) buffer BufrObjDyn {
+layout (std430, binding = 5) readonly buffer BufrObjDyn {
 	PrcObjDyn prcsObjDyn[];
 };
-layout (location = 0) uniform vec3 cameraPos;
-layout (location = 1) uniform mat3 cameraDir;
-const uint objSize = 512;
+layout (location = 0) uniform mat4 camera;
+const uint objSize = 64;
 const float maxDist = 1000.0;
+const vec4 alpha = vec4(0.0, 0.0, 0.0, 1.0);
+const vec4 flattened = vec4(1.0, 0.0, 1.0, 0.0);
 
-float trace (vec3 org, vec3 ray, uint itm) {
-	vec3 off = org - prcsObjDyn[itm].center.xyz;
-	float rad = prcsObjDyn[itm].center.w;
-	float mid = -dot(ray, off)/dot(ray, ray);
-	float pin = length(off + ray * mid);
-	float diff = sqrt(abs(rad*rad - pin*pin));
-	return max(mid - diff, 0) + maxDist * int(pin > rad || mid + diff < 0);
+float trace0 (vec4 org, vec4 ray, uint itm, out vec4 grad) {
+	const vec4 orgAdj = prcsObjDyn[itm].matrix*(org + alpha);
+	const vec4 rayAdj = normalize(prcsObjDyn[itm].matrix*ray);
+	const float mid = -dot(rayAdj, orgAdj)/dot(rayAdj, rayAdj);
+	const float pin = length(orgAdj + rayAdj * mid);
+	const float diff = sqrt(abs(1 - pin*pin));
+	const float dst = max(mid - diff, 0) + maxDist * float(pin > 1 || mid + diff < 0);
+	grad = float(dst < maxDist) * normalize(orgAdj + rayAdj * dst);
+	return dst;
 }
 
-uint search (vec3 org, vec3 ray, inout float dst, uint objlog) {
-	uint itm = 0;
-	uint n = 1;
-	uint i = 0;
-	float d = trace(org, ray, objlog);
-	uint hit = uint(d < dst);
-	uint fnl = uint(objlog >= objSize / 2);
-	itm += hit * fnl * (objlog - itm);
-	dst += hit * fnl * (d - dst);
-	while (n > 0 && i < objSize) {
-		float d = trace(org, ray, n);
-		uint hit = uint(d < dst);
-		uint fnl = uint(n >= objSize / 2);
-		itm += hit * fnl * (n - itm);
-		dst += hit * fnl * (d - dst);
-		n = uint((n & (n + 1)) > 0 || hit * n * (objSize - n - 1) > 0) * (n + 1 + hit * (1 - fnl) * (n - 1) - (1 - hit * (1 - fnl)) * uint(n > 1) * (n % 2) * (n + 1)/2);
-		i++;
-	}
-	return itm;
+float trace1 (vec4 org, vec4 ray, uint itm, out vec4 grad) {
+	const vec4 orgAdj = prcsObjDyn[itm].matrix*(org + alpha);
+	const vec4 rayAdj = normalize(prcsObjDyn[itm].matrix*ray);
+	const vec4 orgFlt = flattened*(orgAdj + alpha);
+	const vec4 rayFlt = normalize(flattened*rayAdj);
+	const float mid = -dot(rayFlt, orgFlt)/dot(rayFlt, rayFlt);
+	const float pin = length(orgFlt + rayFlt * mid);
+	const float diff = sqrt(abs(1 - pin*pin));
+	const float scale = 1 / length(flattened * rayAdj);
+	const float heightA = orgAdj.y + rayAdj.y * (mid - diff) * scale;
+	const float heightB = orgAdj.y + rayAdj.y * (mid + diff) * scale;
+	const float cylndr = float(abs(heightA) <= 1);
+	const float flip = float(sign(heightA)*heightB < 1);
+	const float scan = cylndr * (mid - diff) * scale + (1 - cylndr) * (flip * (sign(heightA) - orgAdj.y) / rayAdj.y + (1 - flip) * maxDist);
+	const float dst = max(scan, 0) + maxDist * float(pin > 1 || mid + diff < 0);
+	grad = float(dst < maxDist) *;
+	return dst;
 }
+
+// uint search (vec4 org, vec4 ray, inout float dst) {
+// 	uint itm = 0;
+// 	uint n = 1;
+// 	uint i = 0;
+// 	while (n > 0 && i < objSize) {
+// 		float d = trace0(org, ray, n);
+// 		uint hit = uint(d < dst);
+// 		uint fnl = uint(n >= objSize / 2);
+// 		itm += hit * fnl * (n - itm);
+// 		dst += hit * fnl * (d - dst);
+// 		n = uint((n & (n + 1)) > 0 || hit * n * (objSize - n - 1) > 0) * (n + 1 + hit * (1 - fnl) * (n - 1) - (1 - hit * (1 - fnl)) * uint(n > 1) * (n % 2) * (n + 1)/2);
+// 		i++;
+// 	}
+// 	return itm;
+// }
 
 void main () {
-	const uint indx = gl_GlobalInvocationID.x + 1280 * gl_GlobalInvocationID.y;
-	const vec3 org = cameraPos;
-	const vec3 ray = cameraDir*prcsPixStcArrow[indx].xyz;
+	const uint indx = gl_GlobalInvocationID.x + 1800 * gl_GlobalInvocationID.y;
+	const vec4 org = camera*alpha;
+	const vec4 ray = camera*prcsPixStcArrow[indx];
 	float dst = 1000;
-	uint itm = search(org, ray, dst, prcsPixDynObjLog[indx]);
-	vec3 hit = org + ray * dst;
-	vec3 light = vec3(0, 1, 0);
-	vec3 normal = (hit - prcsObjDyn[itm].center.xyz) / prcsObjDyn[itm].center.w;
-	prcsPixDynObjLog[indx] = itm;
-	imageStore(imgOut, prcsPixStcPoint[indx], prcsObjDyn[itm].color * (0.5 + 0.5 * dot(light, normal)));
+	vec4 grad;
+	for (int i = 32; i < 33; i++) {
+		dst = min(dst, trace0(org, ray, i, grad));
+	}
+	// uint itm = search(org, ray, dst);
+	// vec4 hit = org + ray * dst;
+	imageStore(imgOut, prcsPixStcPoint[indx], vec4((0.6 + 0.4 * dot(grad, 1-flattened))*float(dst < maxDist), 0, 0, 1));
 }
