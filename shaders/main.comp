@@ -52,7 +52,7 @@ float trace1 (vec4 org, vec4 ray, uint itm, out vec4 grad) {
 	const float flip = float(sign(heightA)*heightB < 1);
 	const float scan = cylndr * (mid - diff) * scale + (1 - cylndr) * (flip * (sign(heightA) - orgAdj.y) / rayAdj.y + (1 - flip) * maxDist);
 	const float dst = max(scan, 0) + maxDist * float(pin > 1 || mid + diff < 0);
-	grad = float(dst < maxDist) *;
+	// grad = float(dst < maxDist);
 	return dst;
 }
 
@@ -78,8 +78,8 @@ void main () {
 	const vec4 ray = camera*prcsPixStcArrow[indx];
 	float dst = 1000;
 	vec4 grad;
-	for (int i = 32; i < 33; i++) {
-		dst = min(dst, trace0(org, ray, i, grad));
+	for (int i = 32; i < 36; i++) {
+		dst = min(dst, trace1(org, ray, i, grad));
 	}
 	// uint itm = search(org, ray, dst);
 	// vec4 hit = org + ray * dst;

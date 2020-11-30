@@ -228,7 +228,7 @@ int main () {
 		float objNewPos[3] = {20.f*rand()/RAND_MAX - 10, 20.f*rand()/RAND_MAX - 10, 20.f*rand()/RAND_MAX - 10};
 		float objNewDir[3] = {0.f, 0.f, 0.f};
 		float rad = 0.8*rand()/RAND_MAX + 0.8;
-		float objNewScl[3] = {rad, rad, rad};
+		float objNewScl[3] = {2*rad, rad, rad};
 		getMatrix(&prcsObjDyn[i].matrix[0], &objNewPos[0], &objNewDir[0], &objNewScl[0]);
 		prcsObjDyn[i].color[0] = 1.0*rand()/RAND_MAX;
 		prcsObjDyn[i].color[1] = 1.0*rand()/RAND_MAX;
